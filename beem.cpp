@@ -12,7 +12,13 @@ using namespace std;
 
 int gCount = 0;
 multimap<int, pair<int, int>> node;
+
 #define be_size 50
+#define manhattan 1
+#define pow2manhattan 1
+#define ntw 0
+#define pow2ntw 0
+#define wro 1
 
 char rot[257];//回転情報の保存
 
@@ -43,6 +49,7 @@ struct Beam {
     int height;  //縦
     int s_rate, c_rate;
     vector<vector<int>> relate; //それぞれの座標に対する隣接リスト
+    vector<vector<int>> ntw_relate; //壁をすり抜けない隣接リスト
 
     set predata[be_size];
     set nextdata[be_size];
@@ -53,41 +60,64 @@ struct Beam {
         int i, j, k;
         int valu;
         int c;  //交換対象の座標
-        /*選択操作を行う*/
-        if (selectable > 0 && (recent == -1 || piece_val(n_select, board.at(n_select)) <= 25)) {
+        //選択回数が残っていて、現在選択しているピースが正解位置にあるなら選択操作を行う
+        //一回目は選択操作を行わないようにするため、recentの初期値-1の時選択操作を行わない
+        if (selectable > 0 && (recent == -1 || piece_val(n_select, board.at(n_select),0) == 0)) {
             for (i = 0; i < width * height; i++) {
-                if (i != board.at(i) && (i != n_select || recent == 0)) {
-                    for (j = 0; j < 4; j++) {
-                        if (relate.at(i).at(j) != -1) {
-                            c = relate.at(i).at(j);
-                            valu = n_val - (piece_val(c, board.at(c)) + piece_val(i, board.at(i))) + (piece_val(c, board.at(i)) + piece_val(i, board.at(c)));
-                            cout << valu << endl;
-                            if (selectable != 1)
-                                node.emplace(valu, make_pair((i + 1) * 1000 + j, pre_root));
-                            else {
-                                swap(board.at(i), board.at(c));
-                                if(parity(board,height*width)==0)
+                if (i != board.at(i) && i != n_select) {   //すでに揃っているピース,現在選択しているピースを選択しない
+                    for (j = 0; j < 4; j++) {   //各方向の探索
+                            if (relate.at(i).at(j) != -1) {
+                                c = relate.at(i).at(j);
+                                //盤面値の更新
+                                valu = n_val - (piece_val(c, board.at(c),0) + piece_val(i, board.at(i),0)) + (piece_val(c, board.at(i),0) + piece_val(i, board.at(c),0));
+                                if (selectable != 1)
                                     node.emplace(valu, make_pair((i + 1) * 1000 + j, pre_root));
-                                swap(board.at(i), board.at(c));
+                                else {
+                                    //選択回数が残り1なら今回の選択で使い切っているので、
+                                    swap(board.at(i), board.at(c));
+                                    //交換前後での整合性をチェックする
+                                    if (parity(board, height * width) == 0)
+                                        node.emplace(valu, make_pair((i + 1) * 1000 + j, pre_root));
+                                    swap(board.at(i), board.at(c));
+                                }
+                                //盤面値の更新終了
                             }
-                        }
                     }
                 }
             }
         }
         if (recent != -1) {
             for (k = 0; k < 4; k++) {
-                if (abs(k - recent) != 2 && relate.at(n_select).at(k) != -1) {
-                    c = relate.at(n_select).at(k);
-                    valu = n_val - (piece_val(c, board.at(c)) + piece_val(n_select, board.at(n_select))) + (piece_val(c, board.at(n_select)) + piece_val(n_select, board.at(c)));
-                    cout << valu << endl;
-                    if (selectable != 0)
-                        node.emplace(valu, make_pair(k, pre_root));
-                    else {
-                        swap(board.at(n_select), board.at(c));
-                        if (parity(board, height * width) == 0)
+                if (selectable != 0) {
+                    if (abs(k - recent) != 2 && relate.at(n_select).at(k) != -1) {
+                        c = relate.at(n_select).at(k);
+                        valu = n_val - (piece_val(c, board.at(c),0) + piece_val(n_select, board.at(n_select),0)) + (piece_val(c, board.at(n_select),0) + piece_val(n_select, board.at(c),0));
+                        if (selectable != 0)
                             node.emplace(valu, make_pair(k, pre_root));
-                        swap(board.at(n_select), board.at(c));
+                        else {
+                            swap(board.at(n_select), board.at(c));
+                            if (parity(board, height * width) == 0)
+                                node.emplace(valu, make_pair(k, pre_root));
+                            swap(board.at(n_select), board.at(c));
+                        }
+                    }
+                }
+                else {  //選択回数が0なら、壁を越えない移動をする
+                    if (abs(k - recent) != 2 && ntw_relate.at(n_select).at(k) != -1) {
+                        c = ntw_relate.at(n_select).at(k);
+                        valu = n_val - (piece_val(c, board.at(c),0) + piece_val(n_select, board.at(n_select),0)) + (piece_val(c, board.at(n_select),0) + piece_val(n_select, board.at(c),0));
+                        if (c == board.at(c)) valu += wro;
+                        if (n_select == board.at(n_select)) valu += wro;
+                        if (n_select == board.at(c)) valu -= wro;
+                        if (c == board.at(n_select)) valu -= wro;
+                        if (selectable != 0)
+                            node.emplace(valu, make_pair(k, pre_root));
+                        else {
+                            swap(board.at(n_select), board.at(c));
+                            if (parity(board, height * width) == 0)
+                                node.emplace(valu, make_pair(k, pre_root));
+                            swap(board.at(n_select), board.at(c));
+                        }
                     }
                 }
             }
@@ -149,19 +179,29 @@ struct Beam {
         }
         fclose(outfile);
     }
-    int piece_val(int np, int cp) {  //np->現在位置cp->正解位置
+    int piece_val(int np, int cp,int mode) {  //np->現在位置cp->正解位置
         int cx = cp % width;
         int cy = cp / width;
         int nx = np % width;
         int ny = np / width;
         int val = min(abs(nx - cx), width - abs(nx - cx)) + min(abs(ny - cy), height - abs(ny - cy));
-        int noThroughVal= abs(nx - cx) + abs(ny - cy);
-        int poswei = abs(((int)width / 2) - cx) + (((int)height / 2) - cy);
-        if (np == cp) poswei = 0;
-        return (val * val + poswei) * c_rate+noThroughVal* noThroughVal*2;
+        if (mode == 1)
+            return val;
+        int noThroughVal = abs(nx - cx) + abs(ny - cy);
+        //int poswei = abs(((int)width / 2) - cx) + (((int)height / 2) - cy);
+        //if (np == cp) poswei = 0;
+        return (val*manhattan) + (val * val*pow2manhattan) +(noThroughVal+ntw)+(noThroughVal * noThroughVal * pow2ntw);
     }
-    Beam(vector<vector<int>> rel, int w, int h, int sr, int cr) {
+    int wrong_piece(vector<int> board) {
+        int i,wrong=0;
+        for (i = 0; i < height * width; i++) {
+            if (i != board.at(i)) wrong++;
+        }
+        return wrong;
+    }
+    Beam(vector<vector<int>> rel, vector<vector<int>> ntw_rel, int w, int h, int sr, int cr) {
         relate = rel;
+        ntw_relate = ntw_rel;
         width = w;
         height = h;
         s_rate = sr;
@@ -287,14 +327,70 @@ int main() {
     }
     //relateの書き込み終了
 
-    Beam problem(relate, width, height, s_rate, c_rate);
 
+    vector<vector<int>> ntw_relate(width * height, vector<int>(4));
+    //non_relateの書き込み
+    for (i = 0; i < height; i++) {
+        for (j = 0; j < width; j++) {
+            for (k = 0; k <= 3; k++) {
+                switch (k) {
+                case 0: //上方向の隣接
+                    if (i != 0)
+                        ntw_relate.at(i * width + j).at(0) = (i - 1) * width + j;
+                    else
+                        ntw_relate.at(j).at(0) = (height - 1) * width + j;
+                    break;
+                case 1: //右方向
+                    if (j != width - 1)
+                        ntw_relate.at(i * width + j).at(1) = i * width + j + 1;
+                    else
+                        ntw_relate.at(i * width + j).at(1) = i * width;
+                    break;
+                case 2: //下方向
+                    if (height == 2) {   //ダブり防止
+                        ntw_relate.at(i * width + j).at(2) = -1;
+                        break;
+                    }
+                    if (i != height - 1)
+                        ntw_relate.at(i * width + j).at(2) = (i + 1) * width + j;
+                    else
+                        ntw_relate.at(i * width + j).at(2) = j;
+                    break;
+                case 3: //左方向
+                    if (width == 2) {
+                        ntw_relate.at(i * width + j).at(3) = -1;
+                        break;
+                    }
+                    if (j != 0)
+                        ntw_relate.at(i * width + j).at(3) = i * width + j - 1;
+                    else
+                        ntw_relate.at(i * width + j).at(3) = (i + 1) * width - 1;
+                    break;
+                }
+            }
+        }
+    }
+    //non_relateの書き込み終了
 
+    Beam problem(relate, ntw_relate, width, height, s_rate, c_rate);
 
     int val = 0;
     for (i = 0; i < width * height; i++) {
-        val += problem.piece_val(i, board.at(i));
+        val += problem.piece_val(i, board.at(i),0);
     }
+    val += problem.wrong_piece(board) * wro;
+
+    int startval = 0;
+    for (i = 0; i < height * width; i++)
+        startval += problem.piece_val(i,board.at(i), 1);
+    cout << "start=" << startval<< endl;
+
+
+    for (i = 0; i < height * width; i++) {
+        cout << problem.piece_val(i, board.at(i), 1) << " ";
+        if ((i + width) % width == width - 1) cout << endl;
+    }
+
     problem.predata[0].board = board;
     problem.predata[0].val = val;
     problem.predata[0].selectable = selectable;
@@ -310,7 +406,7 @@ int main() {
     int depth = 0;
     int l;
 
-    while (gCount == 0) {
+    while (gCount == 0&&depth<500) {
         int dir = 0, sel = 0, root = 0, c = 0;
         node_count = 0;
         for (auto itr = node.begin(); itr != node.end(); ++itr) {
@@ -364,7 +460,7 @@ int main() {
         node.clear();
 
         for (l = 0; l < node_count; l++) {
-            if (gCount == 0 && problem.predata[l].val == 0) {
+            if (gCount == 0 && problem.wrong_piece(problem.predata[l].board) == 0) {
                 problem.be_finished(problem.predata[l].moved);
                 gCount++;
                 break;
@@ -372,12 +468,14 @@ int main() {
 
             problem.be_search(problem.predata[l].board, problem.predata[l].selectable, problem.predata[l].n_select, problem.predata[l].recent, problem.predata[l].val, l);
         }
-
     }
     outputdata();
-    cout << "depth=" << depth << endl;
-    //clock_t end = clock();
-    //cout << "time=" << ((double)end - start) / 1000 << endl;
+    int result = 0;
+    for (i = 0; i < height*width; i++)
+        result += problem.piece_val(i,problem.nextdata->board.at(i), 1);
+    cout <<"result="<< result<<endl;
+    for (i = 0; i < 10000000; i++)
+        cout << 'e';
     return 0;
 }
 
@@ -385,7 +483,7 @@ int parity(vector<int> board, int size) {
     int i;
     int turning = 0;
     bool nup = true;
-    for (i = 0; i < size-1; i++) {
+    for (i = 0; i < size - 1; i++) {
         if (nup) {
             if (board.at(i) > board.at(i + 1)) {
                 nup = false;
