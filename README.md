@@ -1,4 +1,4 @@
-# beemPazzle
+# beemPuzzle
 
 入力フォーマット
 width height  //横、縦のピース数の指定
